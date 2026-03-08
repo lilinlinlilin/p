@@ -24,7 +24,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map  // ← 新增这个 import！关键
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.io.File
 import kotlin.math.abs
@@ -34,10 +34,83 @@ val Context.soundDataStore: DataStore<Preferences> by preferencesDataStore(name 
 
 class MainActivity : ComponentActivity(), SensorEventListener {
 
-    // ... onCreate, onResume, onPause, onDestroy, onSensorChanged, playAudio 保持不变 ...
+    private lateinit var sensorManager: SensorManager
+    private var accelerometer: Sensor? = null
+    private var currentPlayer: MediaPlayer? = null
+    private var selectedDesc by mutableStateOf<String?>(null)
 
-    // ... 省略不变部分 ...
+    private val shakeThreshold = 15f
+    private var lastShake = 0L
 
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+
+        setContent {
+            MaterialTheme {
+                Surface(color = MaterialTheme.colorScheme.background) {
+                    SoundScreen(
+                        onSelect = { selectedDesc = it },
+                        selected = selectedDesc
+                    )
+                }
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_GAME)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        sensorManager.unregisterListener(this)
+        currentPlayer?.pause()
+    }
+
+    override fun onDestroy() {
+        currentPlayer?.release()
+        currentPlayer = null
+        super.onDestroy()
+    }
+
+    override fun onSensorChanged(event: SensorEvent?) {
+        if (event?.sensor?.type != Sensor.TYPE_ACCELEROMETER) return
+
+        val now = System.currentTimeMillis()
+        if (now - lastShake < 400) return
+        lastShake = now
+
+        val x = event.values[0].toDouble()
+        val y = event.values[1].toDouble()
+        val z = event.values[2].toDouble()
+        val speed = sqrt(x * x + y * y + z * z) - SensorManager.GRAVITY_EARTH
+
+        if (abs(speed) > shakeThreshold && selectedDesc != null) {
+            playAudio(selectedDesc!!)
+        }
+    }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
+        // 可以空实现，或加日志
+        // Log.d("Sensor", "Accuracy changed: $accuracy")
+    }
+
+    private fun playAudio(desc: String) {
+        currentPlayer?.release()
+        val soundsDir = File(filesDir, "sounds")
+        val audioFile = File(soundsDir, "$desc.ogg")  // 如果用 mp3，改成 "$desc.mp3"
+        if (audioFile.exists()) {
+            currentPlayer = MediaPlayer().apply {
+                setDataSource(audioFile.absolutePath)
+                prepare()
+                start()
+            }
+        }
+    }
 }
 
 @Composable
@@ -54,7 +127,7 @@ fun SoundScreen(
 
     LaunchedEffect(Unit) {
         context.soundDataStore.data
-            .map { prefs ->  // ← 显式写 prefs -> ... 避免 it 类型推断失败
+            .map { prefs ->
                 val saved = prefs[stringPreferencesKey("descriptions")] ?: ""
                 if (saved.isNotEmpty()) saved.split(",").filter { it.isNotBlank() } else emptyList()
             }
