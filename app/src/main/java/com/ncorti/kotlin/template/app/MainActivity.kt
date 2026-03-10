@@ -213,7 +213,7 @@ fun SoundScreen(
                                 }
                         ) {
                             OutlinedButton(
-                                onClick = { /* 留空，让 pointerInput 处理 */ },
+                                onClick = { /* 留空，让 pointerInput 接管 */ },
                                 border = BorderStroke(
                                     width = 2.dp,
                                     color = if (isSelected) Color.Blue else Color.LightGray
