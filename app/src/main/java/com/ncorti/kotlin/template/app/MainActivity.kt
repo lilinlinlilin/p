@@ -189,30 +189,26 @@ fun SoundScreen(
                     items(descriptions) { desc ->
                         val isSelected = desc == selected
 
-                        OutlinedButton(
-                            onClick = {
-                                onSelect(desc)
-                                // 调试用：确认点击被触发（测试完可删除）
-                                // Toast.makeText(context, "点击选中：$desc", Toast.LENGTH_SHORT).show()
-                            },
-                            border = BorderStroke(
-                                width = 2.dp,
-                                color = if (isSelected) Color.Blue else Color.LightGray
-                            ),
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(vertical = 4.dp)
                                 .pointerInput(Unit) {
                                     detectTapGestures(
-                                        onLongPress = {
-                                            editingDesc = desc
-                                            // 调试用：确认长按被触发（测试完可删除）
-                                            // Toast.makeText(context, "长按检测到：$desc", Toast.LENGTH_SHORT).show()
-                                        }
+                                        onLongPress = { editingDesc = desc }
                                     )
                                 }
                         ) {
-                            Text(desc)
+                            OutlinedButton(
+                                onClick = { onSelect(desc) },  // 短按：选中
+                                border = BorderStroke(
+                                    width = 2.dp,
+                                    color = if (isSelected) Color.Blue else Color.LightGray
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(desc)
+                            }
                         }
                     }
                 }
