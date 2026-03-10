@@ -43,7 +43,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private var currentPlayer: MediaPlayer? = null
     private var selectedDesc by mutableStateOf<String?>(null)
 
-    private val shakeThreshold = 12f  // 调低灵敏度，更容易触发
+    private val shakeThreshold = 12f
     private var lastShake = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -89,7 +89,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         if (event?.sensor?.type != Sensor.TYPE_ACCELEROMETER) return
 
         val now = System.currentTimeMillis()
-        if (now - lastShake < 300) return  // 缩短冷却时间
+        if (now - lastShake < 300) return
         lastShake = now
 
         val x = event.values[0].toDouble()
@@ -106,13 +106,11 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     private fun playAudio(desc: String) {
         currentPlayer?.release()
-        val soundsDir = getExternalFilesDir(null)?.resolve("sounds") ?: run {
-            Toast.makeText(this, "无法获取存储路径", Toast.LENGTH_LONG).show()
-            return
-        }
+        val soundsDir = getExternalFilesDir(null)?.resolve("sounds") ?: return
         if (!soundsDir.exists()) soundsDir.mkdirs()
 
         val audioFile = File(soundsDir, desc)
+
         if (audioFile.exists()) {
             try {
                 currentPlayer = MediaPlayer().apply {
@@ -120,12 +118,12 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     prepare()
                     start()
                 }
-                Toast.makeText(this, "开始播放：$desc", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@MainActivity, "开始播放：$desc", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
-                Toast.makeText(this, "播放失败：${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(this@MainActivity, "播放失败：${e.message}", Toast.LENGTH_LONG).show()
             }
         } else {
-            Toast.makeText(this, "未找到文件：$desc", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this@MainActivity, "未找到文件：$desc", Toast.LENGTH_SHORT).show()
         }
     }
 }
@@ -196,17 +194,12 @@ fun SoundScreen(
                                 .padding(vertical = 4.dp)
                                 .pointerInput(Unit) {
                                     detectTapGestures(
-                                        onPress = { offset ->
-                                            // 短按选中
-                                            onSelect(desc)
-                                            tryAwaitRelease()  // 等待释放
-                                        },
                                         onLongPress = { editingDesc = desc }
                                     )
                                 }
                         ) {
                             OutlinedButton(
-                                onClick = { /* 已移到 onPress */ },
+                                onClick = { onSelect(desc) },
                                 border = BorderStroke(
                                     width = 2.dp,
                                     color = if (isSelected) Color.Blue else Color.LightGray
@@ -222,7 +215,6 @@ fun SoundScreen(
         }
     }
 
-    // 添加对话框
     if (showAddDialog) {
         AlertDialog(
             onDismissRequest = { showAddDialog = false },
@@ -241,12 +233,12 @@ fun SoundScreen(
                         val newList = (descriptions + inputDesc).distinct()
                         scope.launch {
                             context.soundDataStore.updateData { prefs ->
+                                val updated = newList.joinToString(",")
                                 prefs.toMutablePreferences().apply {
-                                    set(stringPreferencesKey("descriptions"), newList.joinToString(","))
+                                    set(stringPreferencesKey("descriptions"), updated)
                                 }
                             }
                         }
-                        Toast.makeText(context, "已添加：$inputDesc", Toast.LENGTH_SHORT).show()
                         inputDesc = ""
                     }
                     showAddDialog = false
@@ -260,7 +252,6 @@ fun SoundScreen(
         )
     }
 
-    // 编辑/删除对话框
     if (editingDesc != null) {
         var editInput by remember { mutableStateOf(editingDesc!!) }
         AlertDialog(
@@ -281,16 +272,16 @@ fun SoundScreen(
                         val newList = descriptions.map { if (it == old) editInput else it }
                         scope.launch {
                             context.soundDataStore.updateData { prefs ->
+                                val updated = newList.joinToString(",")
                                 prefs.toMutablePreferences().apply {
-                                    set(stringPreferencesKey("descriptions"), newList.joinToString(","))
+                                    set(stringPreferencesKey("descriptions"), updated)
                                 }
                             }
                         }
-                        Toast.makeText(context, "已修改为：$editInput", Toast.LENGTH_SHORT).show()
                     }
                     editingDesc = null
                 }) {
-                    Text("保存")
+                    Text("保存修改")
                 }
             },
             dismissButton = {
@@ -300,12 +291,12 @@ fun SoundScreen(
                         val newList = descriptions.filter { it != toDelete }
                         scope.launch {
                             context.soundDataStore.updateData { prefs ->
+                                val updated = newList.joinToString(",")
                                 prefs.toMutablePreferences().apply {
-                                    set(stringPreferencesKey("descriptions"), newList.joinToString(","))
+                                    set(stringPreferencesKey("descriptions"), updated)
                                 }
                             }
                         }
-                        Toast.makeText(context, "已删除：$toDelete", Toast.LENGTH_SHORT).show()
                         editingDesc = null
                     }) {
                         Text("删除")
