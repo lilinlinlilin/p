@@ -7,6 +7,7 @@ import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.media.MediaPlayer
 import android.os.Bundle
+import android.os.Vibrator
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -24,6 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.getSystemService
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
@@ -102,16 +104,13 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
     }
 
-    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
-        // 空实现
-    }
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
     private fun playAudio(desc: String) {
         currentPlayer?.release()
         val soundsDir = getExternalFilesDir(null)?.resolve("sounds") ?: return
         if (!soundsDir.exists()) soundsDir.mkdirs()
 
-        // 直接使用 desc 作为完整文件名（用户需带后缀，如 "开心.ogg"）
         val audioFile = File(soundsDir, desc)
 
         if (audioFile.exists()) {
@@ -137,6 +136,7 @@ fun SoundScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val vibrator = context.getSystemService<Vibrator>()
 
     var descriptions by remember { mutableStateOf(listOf<String>()) }
     var showAddDialog by remember { mutableStateOf(false) }
@@ -154,7 +154,6 @@ fun SoundScreen(
             }
     }
 
-    // 显示用户可见的私有外部路径
     val dirPath = remember {
         context.getExternalFilesDir(null)?.resolve("sounds")?.absolutePath ?: "无法获取路径"
     }
@@ -174,15 +173,10 @@ fun SoundScreen(
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(
-                "摇一摇播放声音",
-                style = MaterialTheme.typography.headlineMedium
-            )
+            Text("摇一摇播放声音", style = MaterialTheme.typography.headlineMedium)
             Spacer(Modifier.height(16.dp))
             Text(
-                "把音频文件放到：\n$dirPath\n" +
-                "文件名必须完全等于描述（包括后缀，例如 '开心.ogg' 或 '笑声.mp3'）\n" +
-                "路径通常在：Android/data/你的包名/files/sounds",
+                "把音频文件放到：\n$dirPath\n文件名必须完全等于描述（包括后缀，例如 '开心.ogg' 或 '笑声.mp3'）",
                 style = MaterialTheme.typography.bodyMedium,
                 color = Color.Gray
             )
@@ -199,9 +193,12 @@ fun SoundScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(vertical = 4.dp)
-                                .pointerInput(Unit) {
+                                .pointerInput(desc) {  // 改用 desc 作为 key，避免 recomposition 问题
                                     detectTapGestures(
-                                        onLongPress = { editingDesc = desc }
+                                        onLongPress = {
+                                            vibrator?.vibrate(50L)  // 短振动反馈，确认长按触发
+                                            editingDesc = desc
+                                        }
                                     )
                                 },
                             border = BorderStroke(
@@ -217,7 +214,7 @@ fun SoundScreen(
         }
     }
 
-    // 添加对话框
+    // 添加对话框（不变）
     if (showAddDialog) {
         AlertDialog(
             onDismissRequest = { showAddDialog = false },
@@ -255,7 +252,7 @@ fun SoundScreen(
         )
     }
 
-    // 编辑/删除对话框（长按触发）
+    // 编辑/删除对话框（不变）
     if (editingDesc != null) {
         var editInput by remember { mutableStateOf(editingDesc ?: "") }
         AlertDialog(
