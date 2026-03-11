@@ -27,7 +27,6 @@ import androidx.compose.ui.unit.dp
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.io.File
@@ -253,9 +252,9 @@ fun SoundScreen(
         )
     }
 
-    // 编辑 / 删除对话框
+    // 编辑 / 删除对话框   ← 这里已修复 null-safety 问题
     if (editingDesc != null) {
-        var editInput by remember { mutableStateOf(editingDesc!!) }
+        var editInput by remember { mutableStateOf(editingDesc) }  // 去掉 !!，利用 smart cast
 
         AlertDialog(
             onDismissRequest = { editingDesc = null },
@@ -271,7 +270,7 @@ fun SoundScreen(
             confirmButton = {
                 TextButton(onClick = {
                     if (editInput.isNotBlank() && editInput != editingDesc) {
-                        val old = editingDesc!!
+                        val old = editingDesc
                         val newList = descriptions.map { if (it == old) editInput else it }
                         scope.launch {
                             context.soundDataStore.updateData { prefs ->
@@ -289,7 +288,7 @@ fun SoundScreen(
             dismissButton = {
                 Row {
                     TextButton(onClick = {
-                        val toDelete = editingDesc!!
+                        val toDelete = editingDesc
                         val newList = descriptions.filter { it != toDelete }
                         scope.launch {
                             context.soundDataStore.updateData { prefs ->
