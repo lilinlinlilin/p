@@ -12,9 +12,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
-import androidx.compose.foundation.gestures.awaitPointerEventScope
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -23,14 +21,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.consumeAllChanges
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.io.File
@@ -63,8 +59,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     SoundScreen(
-                        onSelect = { selectedDesc = it },
-                        selected = selectedDesc
+                        selected = selectedDesc,
+                        onSelect = { selectedDesc = it }
                     )
                 }
             }
@@ -178,8 +174,8 @@ fun SoundScreen(
             Spacer(Modifier.height(16.dp))
             Text(
                 "音频路径：\n$dirPath\n" +
-                "文件名必须完全等于描述（包括后缀，如 '开心.ogg' 或 '笑声.mp3'）\n" +
-                "位置：存储 → Android → data → com.ncorti.kotlin.template.app → files → sounds",
+                        "文件名必须完全等于描述（包括后缀，如 '开心.ogg' 或 '笑声.mp3'）\n" +
+                        "位置：存储 → Android → data → com.ncorti.kotlin.template.app → files → sounds",
                 style = MaterialTheme.typography.bodyMedium,
                 color = Color.Gray
             )
@@ -197,23 +193,14 @@ fun SoundScreen(
                                 .fillMaxWidth()
                                 .padding(vertical = 4.dp)
                                 .pointerInput(Unit) {
-                                    awaitPointerEventScope {
-                                        while (true) {
-                                            val down = awaitFirstDown(requireUnconsumed = false)
-                                            val change = awaitLongPressOrCancellation(down.id)
-
-                                            if (change != null) {
-                                                change.consumeAllChanges()
-                                                editingDesc = desc
-                                            } else {
-                                                onSelect(desc)
-                                            }
-                                        }
-                                    }
+                                    detectTapGestures(
+                                        onTap = { onSelect(desc) },
+                                        onLongPress = { editingDesc = desc }
+                                    )
                                 }
                         ) {
                             OutlinedButton(
-                                onClick = { /* 留空 */ },
+                                onClick = { /* 故意留空，使用 pointerInput 处理点击 */ },
                                 border = BorderStroke(
                                     width = 2.dp,
                                     color = if (isSelected) Color.Blue else Color.LightGray
