@@ -53,8 +53,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 启用边缘到边缘 + 隐藏状态栏和导航栏（真正全屏）
         enableEdgeToEdge()
+
+        // 隐藏状态栏和导航栏（真正全屏）
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.decorView.systemUiVisibility = (
             View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
