@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -118,7 +119,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
         val audioFile = File(soundsDir, desc)
         if (!audioFile.exists()) {
-            Toast.makeText(this, "未找到音频文件：$desc", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "未找到音檔：$desc", Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -129,7 +130,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 start()
             }
         } catch (e: Exception) {
-            Toast.makeText(this, "播放失败：${e.message}", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "播放失敗：${e.message}", Toast.LENGTH_LONG).show()
             currentPlayer?.release()
             currentPlayer = null
         }
@@ -185,14 +186,14 @@ fun SoundScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                "摇一摇播放声音",
+                "搖一搖播放聲音",
                 style = MaterialTheme.typography.headlineMedium
             )
             Spacer(Modifier.height(24.dp))
 
             if (descriptions.isEmpty()) {
                 Text(
-                    "还没有声音描述\n点击右下角 + 添加",
+                    "還沒有聲音描述\n點擊右下角 + 新增",
                     color = Color.Gray,
                     textAlign = TextAlign.Center
                 )
@@ -249,8 +250,8 @@ fun SoundScreen(
                                         }
                                     ) {
                                         Icon(
-                                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                            contentDescription = if (isPlaying) "暂停" else "播放",
+                                            imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                                            contentDescription = if (isPlaying) "暫停" else "播放",
                                             tint = if (isPlaying) Color.Red else MaterialTheme.colorScheme.primary
                                         )
                                     }
@@ -263,16 +264,16 @@ fun SoundScreen(
         }
     }
 
-    // 添加新声音对话框
+    // 新增聲音對話框
     if (showAddDialog) {
         AlertDialog(
             onDismissRequest = { showAddDialog = false },
-            title = { Text("添加新声音") },
+            title = { Text("新增聲音") },
             text = {
                 OutlinedTextField(
                     value = inputDesc,
                     onValueChange = { inputDesc = it.trim() },
-                    label = { Text("描述（必须包含后缀，如 '开心.ogg'）") },
+                    label = { Text("描述（必須包含副檔名，例如 '開心.ogg'）") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -291,24 +292,24 @@ fun SoundScreen(
                         inputDesc = ""
                     }
                     showAddDialog = false
-                }) { Text("添加") }
+                }) { Text("新增") }
             },
             dismissButton = { TextButton(onClick = { showAddDialog = false }) { Text("取消") } }
         )
     }
 
-    // 编辑/删除对话框
+    // 編輯/刪除對話框
     editingDesc?.let { current ->
         var editInput by remember { mutableStateOf(current) }
 
         AlertDialog(
             onDismissRequest = { editingDesc = null },
-            title = { Text("编辑或删除：$current") },
+            title = { Text("編輯或刪除：$current") },
             text = {
                 OutlinedTextField(
                     value = editInput,
                     onValueChange = { editInput = it.trim() },
-                    label = { Text("修改描述（保持后缀）") },
+                    label = { Text("修改描述（保留副檔名）") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -326,7 +327,7 @@ fun SoundScreen(
                         }
                     }
                     editingDesc = null
-                }) { Text("保存修改") }
+                }) { Text("儲存修改") }
             },
             dismissButton = {
                 Row {
@@ -347,7 +348,7 @@ fun SoundScreen(
                         }
                         editingDesc = null
                     }) {
-                        Text("删除", color = MaterialTheme.colorScheme.error)
+                        Text("刪除", color = MaterialTheme.colorScheme.error)
                     }
                     TextButton(onClick = { editingDesc = null }) { Text("取消") }
                 }
