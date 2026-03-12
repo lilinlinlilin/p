@@ -1,24 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- 使用 Material3 主題 + NoActionBar，最適合 Compose + edge-to-edge -->
-    <style name="AppTheme" parent="Theme.Material3.DayNight.NoActionBar">
+    <!-- 改用這個 parent（Material 2 或 AppCompat 兼容） -->
+    <style name="AppTheme" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <!-- 或用 Theme.AppCompat.Light.NoActionBar，如果沒 material library -->
+
         <item name="colorPrimary">@color/colorPrimary</item>
         <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
         <item name="colorAccent">@color/colorAccent</item>
 
-        <!-- 系統欄完全透明 -->
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
-
-        <!-- 圖示深色（適合淺背景） -->
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:windowLightNavigationBar" tools:targetApi="o_mr1">true</item>
-
-        <!-- 關鍵：Window 背景透明，避免預設黑/白邊 -->
         <item name="android:windowBackground">@android:color/transparent</item>
-
-        <!-- Android 15+ 避免強制對比或半透明 scrim -->
         <item name="android:enforceStatusBarContrast">false</item>
         <item name="android:enforceNavigationBarContrast">false</item>
     </style>
