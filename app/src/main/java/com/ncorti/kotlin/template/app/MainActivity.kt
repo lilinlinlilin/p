@@ -25,7 +25,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
@@ -167,10 +166,6 @@ fun SoundScreen(
             }
     }
 
-    val dirPath = remember {
-        context.getExternalFilesDir(null)?.resolve("sounds")?.absolutePath ?: "无法获取路径"
-    }
-
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         floatingActionButton = {
@@ -186,19 +181,10 @@ fun SoundScreen(
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("摇一摇播放声音", style = MaterialTheme.typography.headlineMedium)
-            Spacer(Modifier.height(16.dp))
-
-            Text(
-                "把音频文件放到：\n$dirPath\n文件名必须完全等于描述（包括后缀）",
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.Gray,
-                textAlign = TextAlign.Center
-            )
             Spacer(Modifier.height(24.dp))
 
             if (descriptions.isEmpty()) {
-                Text("还没有声音描述\n点击右下角 + 添加", color = Color.Gray)
+                Spacer(Modifier.weight(1f))
             } else {
                 LazyColumn(modifier = Modifier.weight(1f)) {
                     items(descriptions) { desc ->
@@ -211,7 +197,7 @@ fun SoundScreen(
                                 .padding(vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // 主区域：统一用 pointerInput 处理所有手势（参考脚本风格）
+                            // 主区域：统一手势处理
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
                                 border = BorderStroke(
@@ -223,12 +209,8 @@ fun SoundScreen(
                                     .weight(1f)
                                     .pointerInput(desc) {
                                         detectTapGestures(
-                                            onTap = {
-                                                onSelect(desc)
-                                            },
-                                            onLongPress = {
-                                                editingDesc = desc
-                                            }
+                                            onTap = { onSelect(desc) },
+                                            onLongPress = { editingDesc = desc }
                                         )
                                     }
                             ) {
@@ -247,7 +229,7 @@ fun SoundScreen(
 
                             Spacer(Modifier.width(8.dp))
 
-                            // 小播放按钮：36dp 圆形、无内容
+                            // 小播放按钮：36dp 圆形、无文字无图标
                             Button(
                                 onClick = {
                                     onPlayToggle(desc)
@@ -268,16 +250,16 @@ fun SoundScreen(
         }
     }
 
-    // 添加对话框
+    // 添加对话框（无额外文字提示）
     if (showAddDialog) {
         AlertDialog(
             onDismissRequest = { showAddDialog = false },
-            title = { Text("添加新声音") },
+            title = { Text("新增") },
             text = {
                 OutlinedTextField(
                     value = inputDesc,
                     onValueChange = { inputDesc = it.trim() },
-                    label = { Text("描述（必须包含后缀，如 '开心.ogg'）") },
+                    label = { Text("描述（含后缀）") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -288,16 +270,15 @@ fun SoundScreen(
                         val newList = (descriptions + inputDesc).distinct()
                         scope.launch {
                             context.soundDataStore.updateData { prefs ->
-                                val updated = newList.joinToString(",")
                                 prefs.toMutablePreferences().apply {
-                                    set(stringPreferencesKey("descriptions"), updated)
+                                    set(stringPreferencesKey("descriptions"), newList.joinToString(","))
                                 }
                             }
                         }
                         inputDesc = ""
                     }
                     showAddDialog = false
-                }) { Text("添加") }
+                }) { Text("确定") }
             },
             dismissButton = { TextButton(onClick = { showAddDialog = false }) { Text("取消") } }
         )
@@ -309,12 +290,12 @@ fun SoundScreen(
 
         AlertDialog(
             onDismissRequest = { editingDesc = null },
-            title = { Text("编辑或删除：$current") },
+            title = { Text("操作") },
             text = {
                 OutlinedTextField(
                     value = editInput,
                     onValueChange = { editInput = it.trim() },
-                    label = { Text("修改描述（保持后缀）") },
+                    label = { Text("修改描述") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -332,7 +313,7 @@ fun SoundScreen(
                         }
                     }
                     editingDesc = null
-                }) { Text("保存修改") }
+                }) { Text("保存") }
             },
             dismissButton = {
                 Row {
@@ -348,7 +329,7 @@ fun SoundScreen(
                         }
                         if (selected == toDelete) onSelect("")
                         if (currentlyPlaying == toDelete) {
-                            onPlayToggle(toDelete)  // 停止播放
+                            onPlayToggle(toDelete)
                             currentlyPlaying = null
                         }
                         editingDesc = null
