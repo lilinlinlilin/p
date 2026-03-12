@@ -1,0 +1,15 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Base application theme -->
+    <style name="AppTheme" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- 讓狀態欄透明 -->
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <!-- 讓導航欄透明（手勢導航時特別重要） -->
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <!-- 狀態欄圖示顏色：true = 深色圖示（適合淺背景），false = 淺色圖示（適合深背景） -->
+        <item name="android:windowLightStatusBar">true</item>
+        <!-- 導航欄圖示顏色 -->
+        <item name="android:windowLightNavigationBar" tools:targetApi="o_mr1">true</item>
+        <!-- 視窗背景色（確保與 Surface 一致） -->
+        <item name="android:windowBackground">@android:color/white</item> <!-- 或 @color/black 如果深色主題 -->
+    </style>
+</resources>
