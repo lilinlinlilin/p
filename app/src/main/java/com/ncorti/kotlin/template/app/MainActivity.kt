@@ -16,6 +16,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -42,7 +43,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private var currentPlayer: MediaPlayer? = null
     private var selectedDesc by mutableStateOf<String?>(null)
 
-    private val shakeThreshold = 12f
+    private val shakeThreshold = 15f
     private var lastShake = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -88,7 +89,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         if (event?.sensor?.type != Sensor.TYPE_ACCELEROMETER) return
 
         val now = System.currentTimeMillis()
-        if (now - lastShake < 300) return
+        if (now - lastShake < 400) return
         lastShake = now
 
         val x = event.values[0].toDouble()
@@ -101,7 +102,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
     }
 
-    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
+        // 空实现
+    }
 
     private fun playAudio(desc: String) {
         currentPlayer?.release()
@@ -117,7 +120,6 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     prepare()
                     start()
                 }
-                Toast.makeText(this@MainActivity, "开始播放：$desc", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 Toast.makeText(this@MainActivity, "播放失败：${e.message}", Toast.LENGTH_LONG).show()
             }
@@ -170,28 +172,31 @@ fun SoundScreen(
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("摇一摇播放声音", style = MaterialTheme.typography.headlineMedium)
+            Text(
+                "摇一摇播放声音",
+                style = MaterialTheme.typography.headlineMedium
+            )
             Spacer(Modifier.height(16.dp))
 
             Text(
-                text = "音频路径：\n$dirPath\n" +
-                        "文件名必须完全等于描述（包括后缀，如 '开心.ogg' 或 '笑声.mp3'）\n" +
-                        "位置：存储 → Android → data → com.ncorti.kotlin.template.app → files → sounds",
+                "把音频文件放到：\n$dirPath\n" +
+                        "文件名必须完全等于描述（包括后缀，例如 '开心.ogg' 或 '笑声.mp3'）\n" +
+                        "路径通常在：Android/data/你的包名/files/sounds",
                 style = MaterialTheme.typography.bodyMedium,
                 color = Color.Gray
             )
-
             Spacer(Modifier.height(32.dp))
 
             if (descriptions.isEmpty()) {
-                Text("还没有声音描述\n点击 + 添加", color = Color.Gray)
+                Text("还没有声音描述\n点击右下角 + 添加", color = Color.Gray)
             } else {
                 LazyColumn {
                     items(descriptions) { desc ->
                         val isSelected = desc == selected
 
-                        OutlinedButton(
+                        Surface(
                             onClick = { onSelect(desc) },
+                            shape = RoundedCornerShape(12.dp),
                             border = BorderStroke(
                                 width = 2.dp,
                                 color = if (isSelected) Color.Blue else Color.LightGray
@@ -199,7 +204,7 @@ fun SoundScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(vertical = 4.dp)
-                                .pointerInput(desc) {
+                                .pointerInput(Unit) {
                                     detectTapGestures(
                                         onLongPress = {
                                             editingDesc = desc
@@ -207,7 +212,17 @@ fun SoundScreen(
                                     )
                                 }
                         ) {
-                            Text(desc)
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = desc,
+                                    color = if (isSelected) Color.Blue else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
                         }
                     }
                 }
@@ -215,6 +230,7 @@ fun SoundScreen(
         }
     }
 
+    // 添加对话框
     if (showAddDialog) {
         AlertDialog(
             onDismissRequest = { showAddDialog = false },
@@ -223,8 +239,9 @@ fun SoundScreen(
                 OutlinedTextField(
                     value = inputDesc,
                     onValueChange = { inputDesc = it.trim() },
-                    label = { Text("描述（带后缀，如 '开心.ogg'）") },
-                    singleLine = true
+                    label = { Text("描述（必须包含后缀，如 '开心.ogg'）") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
                 )
             },
             confirmButton = {
@@ -232,9 +249,10 @@ fun SoundScreen(
                     if (inputDesc.isNotBlank()) {
                         val newList = (descriptions + inputDesc).distinct()
                         scope.launch {
-                            context.soundDataStore.updateData { preferences: Preferences ->
-                                preferences.toMutablePreferences().apply {
-                                    set(stringPreferencesKey("descriptions"), newList.joinToString(","))
+                            context.soundDataStore.updateData { prefs ->
+                                val updated = newList.joinToString(",")
+                                prefs.toMutablePreferences().apply {
+                                    set(stringPreferencesKey("descriptions"), updated)
                                 }
                             }
                         }
@@ -251,30 +269,32 @@ fun SoundScreen(
         )
     }
 
+    // 编辑/删除对话框（长按触发）
     if (editingDesc != null) {
-        val currentDesc = editingDesc!!   // 安全，因为外层 if 判断过非空
-
-        var editInput by remember(currentDesc) { mutableStateOf(currentDesc) }
+        var editInput by remember { mutableStateOf(editingDesc ?: "") }
 
         AlertDialog(
             onDismissRequest = { editingDesc = null },
-            title = { Text("编辑或删除：$currentDesc") },
+            title = { Text("编辑或删除：$editingDesc") },
             text = {
                 OutlinedTextField(
                     value = editInput,
                     onValueChange = { editInput = it.trim() },
                     label = { Text("修改描述（保持后缀）") },
-                    singleLine = true
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
                 )
             },
             confirmButton = {
                 TextButton(onClick = {
-                    if (editInput.isNotBlank() && editInput != currentDesc) {
-                        val newList = descriptions.map { if (it == currentDesc) editInput else it }
+                    if (editInput.isNotBlank() && editInput != editingDesc) {
+                        val old = editingDesc!!
+                        val newList = descriptions.map { if (it == old) editInput else it }
                         scope.launch {
-                            context.soundDataStore.updateData { preferences: Preferences ->
-                                preferences.toMutablePreferences().apply {
-                                    set(stringPreferencesKey("descriptions"), newList.joinToString(","))
+                            context.soundDataStore.updateData { prefs ->
+                                val updated = newList.joinToString(",")
+                                prefs.toMutablePreferences().apply {
+                                    set(stringPreferencesKey("descriptions"), updated)
                                 }
                             }
                         }
@@ -287,18 +307,20 @@ fun SoundScreen(
             dismissButton = {
                 Row {
                     TextButton(onClick = {
-                        val newList = descriptions.filter { it != currentDesc }
+                        val toDelete = editingDesc!!
+                        val newList = descriptions.filter { it != toDelete }
                         scope.launch {
-                            context.soundDataStore.updateData { preferences: Preferences ->
-                                preferences.toMutablePreferences().apply {
-                                    set(stringPreferencesKey("descriptions"), newList.joinToString(","))
+                            context.soundDataStore.updateData { prefs ->
+                                val updated = newList.joinToString(",")
+                                prefs.toMutablePreferences().apply {
+                                    set(stringPreferencesKey("descriptions"), updated)
                                 }
                             }
                         }
-                        if (selected == currentDesc) onSelect(null)
+                        if (selected == toDelete) onSelect("") // 可选：删除后清空选中
                         editingDesc = null
                     }) {
-                        Text("删除")
+                        Text("删除", color = MaterialTheme.colorScheme.error)
                     }
                     TextButton(onClick = { editingDesc = null }) { Text("取消") }
                 }
