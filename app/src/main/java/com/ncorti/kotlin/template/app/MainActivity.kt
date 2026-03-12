@@ -7,7 +7,7 @@ import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.media.MediaPlayer
 import android.os.Bundle
-import android.view.WindowManager
+import android.view.View
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -19,6 +19,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,9 +29,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
@@ -53,14 +56,17 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 全屏设置：隐藏状态栏，内容延伸到边缘
+        // 启用边缘到边缘 + 隐藏状态栏和导航栏（真正全屏）
         enableEdgeToEdge()
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        WindowInsetsControllerCompat(window, window.decorView).let { controller ->
-            controller.hide(androidx.core.view.WindowInsetsCompat.Type.statusBars())
-            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        }
-        window.navigationBarColor = android.graphics.Color.TRANSPARENT  // 导航栏透明
+        window.decorView.systemUiVisibility = (
+            View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+            View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
+            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+            View.SYSTEM_UI_FLAG_FULLSCREEN or
+            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+        )
 
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
@@ -74,7 +80,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     SoundScreen(
                         selected = selectedDesc,
                         onSelect = { selectedDesc = it },
-                        onPlayToggle = { desc -> togglePlay(desc) }
+                        onPlay = { desc -> playAudio(desc) },
+                        onStop = { stopAudio() }
                     )
                 }
             }
@@ -110,11 +117,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val z = event.values[2].toDouble()
         val speed = sqrt(x * x + y * y + z * z) - SensorManager.GRAVITY_EARTH
 
-        if (abs(speed) > shakeThreshold && selectedDesc != null) {
-            // 播放同一首时不重新播放
-            if (currentPlayer?.isPlaying != true) {
-                playAudio(selectedDesc!!)
-            }
+        if (abs(speed) > shakeThreshold && !selectedDesc.isNullOrBlank()) {
+            playAudio(selectedDesc!!)
         }
     }
 
@@ -128,36 +132,28 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         if (!soundsDir.exists()) soundsDir.mkdirs()
 
         val audioFile = File(soundsDir, desc)
+        if (!audioFile.exists()) {
+            Toast.makeText(this, "未找到音频文件：$desc", Toast.LENGTH_SHORT).show()
+            return
+        }
 
-        if (audioFile.exists()) {
-            try {
-                currentPlayer = MediaPlayer().apply {
-                    setDataSource(audioFile.absolutePath)
-                    prepare()
-                    start()
-
-                    // 播放结束时自动重置状态（关键修复）
-                    setOnCompletionListener {
-                        currentPlayer?.release()
-                        currentPlayer = null
-                        // 通过广播或状态更新 UI，这里直接依赖 Composable 监听
-                    }
-                }
-            } catch (e: Exception) {
-                Toast.makeText(this@MainActivity, "播放失败：${e.message}", Toast.LENGTH_LONG).show()
+        try {
+            currentPlayer = MediaPlayer().apply {
+                setDataSource(audioFile.absolutePath)
+                prepare()
+                start()
             }
-        } else {
-            Toast.makeText(this@MainActivity, "未找到音频文件：$desc", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "播放失败：${e.message}", Toast.LENGTH_LONG).show()
+            currentPlayer?.release()
+            currentPlayer = null
         }
     }
 
-    fun togglePlay(desc: String) {
-        if (currentPlayer?.isPlaying == true && selectedDesc == desc) {
-            currentPlayer?.pause()  // 改为 pause 而不是 stop+release，保留位置
-        } else {
-            playAudio(desc)
-            selectedDesc = desc
-        }
+    private fun stopAudio() {
+        currentPlayer?.stop()
+        currentPlayer?.release()
+        currentPlayer = null
     }
 }
 
@@ -165,7 +161,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 fun SoundScreen(
     selected: String?,
     onSelect: (String) -> Unit,
-    onPlayToggle: (String) -> Unit
+    onPlay: (String) -> Unit,
+    onStop: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -175,15 +172,6 @@ fun SoundScreen(
     var inputDesc by remember { mutableStateOf("") }
     var editingDesc by remember { mutableStateOf<String?>(null) }
     var currentlyPlaying by remember { mutableStateOf<String?>(null) }
-
-    // 监听播放结束（通过 rememberUpdatedState 间接实现状态同步）
-    val currentPlayerState by rememberUpdatedState(currentPlayer)
-
-    LaunchedEffect(currentPlayerState) {
-        currentPlayerState?.setOnCompletionListener {
-            currentlyPlaying = null
-        }
-    }
 
     LaunchedEffect(Unit) {
         context.soundDataStore.data
@@ -197,7 +185,10 @@ fun SoundScreen(
     }
 
     Scaffold(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .consumeWindowInsets(false)  // 消费 insets，让内容填满
+            .windowInsetsPadding(WindowInsets(0.dp)),  // 强制忽略系统栏空间
         floatingActionButton = {
             FloatingActionButton(onClick = { showAddDialog = true }) {
                 Text("+")
@@ -211,8 +202,18 @@ fun SoundScreen(
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            Text(
+                "摇一摇播放声音",
+                style = MaterialTheme.typography.headlineMedium
+            )
+            Spacer(Modifier.height(24.dp))
+
             if (descriptions.isEmpty()) {
-                Spacer(Modifier.weight(1f))
+                Text(
+                    "还没有声音描述\n点击右下角 + 添加",
+                    color = Color.Gray,
+                    textAlign = TextAlign.Center
+                )
             } else {
                 LazyColumn(modifier = Modifier.weight(1f)) {
                     items(descriptions) { desc ->
@@ -222,9 +223,10 @@ fun SoundScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 4.dp),
+                                .padding(vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            // 主区域：统一手势处理
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
                                 border = BorderStroke(
@@ -241,35 +243,38 @@ fun SoundScreen(
                                         )
                                     }
                             ) {
-                                Box(
+                                Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(horizontal = 16.dp, vertical = 14.dp),
-                                    contentAlignment = Alignment.CenterStart
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
                                     Text(
                                         text = desc,
-                                        color = if (isSelected) Color.Blue else MaterialTheme.colorScheme.onSurface
+                                        color = if (isSelected) Color.Blue else MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.weight(1f)
                                     )
+
+                                    IconButton(
+                                        onClick = {
+                                            if (isPlaying) {
+                                                onStop()
+                                                currentlyPlaying = null
+                                            } else {
+                                                onPlay(desc)
+                                                currentlyPlaying = desc
+                                            }
+                                        }
+                                    ) {
+                                        Icon(
+                                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                            contentDescription = if (isPlaying) "暂停" else "播放",
+                                            tint = if (isPlaying) Color.Red else MaterialTheme.colorScheme.primary
+                                        )
+                                    }
                                 }
                             }
-
-                            Spacer(Modifier.width(8.dp))
-
-                            // 小播放按钮
-                            Button(
-                                onClick = {
-                                    onPlayToggle(desc)
-                                    currentlyPlaying = if (isPlaying) null else desc
-                                },
-                                modifier = Modifier.size(36.dp),
-                                shape = CircleShape,
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = if (isPlaying) Color.Red.copy(alpha = 0.8f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
-                                ),
-                                contentPadding = PaddingValues(0.dp),
-                                elevation = ButtonDefaults.buttonElevation(0.dp)
-                            ) {}
                         }
                     }
                 }
@@ -277,16 +282,16 @@ fun SoundScreen(
         }
     }
 
-    // 添加对话框（极简）
+    // 添加新声音对话框
     if (showAddDialog) {
         AlertDialog(
             onDismissRequest = { showAddDialog = false },
-            title = { },
+            title = { Text("添加新声音") },
             text = {
                 OutlinedTextField(
                     value = inputDesc,
                     onValueChange = { inputDesc = it.trim() },
-                    label = { Text("描述") },
+                    label = { Text("描述（必须包含后缀，如 '开心.ogg'）") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -305,9 +310,9 @@ fun SoundScreen(
                         inputDesc = ""
                     }
                     showAddDialog = false
-                }) { Text("确定") }
+                }) { Text("添加") }
             },
-            dismissButton = { TextButton(onClick = { showAddDialog = false }) { } }
+            dismissButton = { TextButton(onClick = { showAddDialog = false }) { Text("取消") } }
         )
     }
 
@@ -317,12 +322,12 @@ fun SoundScreen(
 
         AlertDialog(
             onDismissRequest = { editingDesc = null },
-            title = { },
+            title = { Text("编辑或删除：$current") },
             text = {
                 OutlinedTextField(
                     value = editInput,
                     onValueChange = { editInput = it.trim() },
-                    label = { Text("修改") },
+                    label = { Text("修改描述（保持后缀）") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -340,7 +345,7 @@ fun SoundScreen(
                         }
                     }
                     editingDesc = null
-                }) { Text("保存") }
+                }) { Text("保存修改") }
             },
             dismissButton = {
                 Row {
@@ -356,14 +361,14 @@ fun SoundScreen(
                         }
                         if (selected == toDelete) onSelect("")
                         if (currentlyPlaying == toDelete) {
-                            onPlayToggle(toDelete)
+                            onStop()
                             currentlyPlaying = null
                         }
                         editingDesc = null
                     }) {
                         Text("删除", color = MaterialTheme.colorScheme.error)
                     }
-                    TextButton(onClick = { editingDesc = null }) { }
+                    TextButton(onClick = { editingDesc = null }) { Text("取消") }
                 }
             }
         )
