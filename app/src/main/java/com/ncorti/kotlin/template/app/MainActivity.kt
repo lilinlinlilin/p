@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -61,15 +63,16 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     SoundScreen(
+                        selected = selectedDesc,
                         onSelect = { selectedDesc = it },
-                        selected = selectedDesc
+                        onPlay = { desc -> playAudio(desc) },
+                        onStop = { stopAudio() }
                     )
                 }
             }
         }
     }
 
-    // 传感器相关代码保持不变（略去中间部分以节省篇幅）
     override fun onResume() {
         super.onResume()
         sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_GAME)
@@ -99,7 +102,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val z = event.values[2].toDouble()
         val speed = sqrt(x * x + y * y + z * z) - SensorManager.GRAVITY_EARTH
 
-        if (abs(speed) > shakeThreshold && selectedDesc != null) {
+        if (abs(speed) > shakeThreshold && !selectedDesc.isNullOrBlank()) {
             playAudio(selectedDesc!!)
         }
     }
@@ -108,31 +111,43 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     private fun playAudio(desc: String) {
         currentPlayer?.release()
+        currentPlayer = null
+
         val soundsDir = getExternalFilesDir(null)?.resolve("sounds") ?: return
         if (!soundsDir.exists()) soundsDir.mkdirs()
 
         val audioFile = File(soundsDir, desc)
-
-        if (audioFile.exists()) {
-            try {
-                currentPlayer = MediaPlayer().apply {
-                    setDataSource(audioFile.absolutePath)
-                    prepare()
-                    start()
-                }
-            } catch (e: Exception) {
-                Toast.makeText(this@MainActivity, "播放失败：${e.message}", Toast.LENGTH_LONG).show()
-            }
-        } else {
-            Toast.makeText(this@MainActivity, "未找到音频文件：$desc", Toast.LENGTH_SHORT).show()
+        if (!audioFile.exists()) {
+            Toast.makeText(this, "未找到音频文件：$desc", Toast.LENGTH_SHORT).show()
+            return
         }
+
+        try {
+            currentPlayer = MediaPlayer().apply {
+                setDataSource(audioFile.absolutePath)
+                prepare()
+                start()
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "播放失败：${e.message}", Toast.LENGTH_LONG).show()
+            currentPlayer?.release()
+            currentPlayer = null
+        }
+    }
+
+    private fun stopAudio() {
+        currentPlayer?.stop()
+        currentPlayer?.release()
+        currentPlayer = null
     }
 }
 
 @Composable
 fun SoundScreen(
     selected: String?,
-    onSelect: (String) -> Unit
+    onSelect: (String) -> Unit,
+    onPlay: (String) -> Unit,
+    onStop: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -141,14 +156,7 @@ fun SoundScreen(
     var showAddDialog by remember { mutableStateOf(false) }
     var inputDesc by remember { mutableStateOf("") }
     var editingDesc by remember { mutableStateOf<String?>(null) }
-
-    // 日志列表（用于显示短按/长按事件）
-    var gestureLogs by remember { mutableStateOf(listOf<String>()) }
-
-    fun logGesture(message: String) {
-        val time = java.text.SimpleDateFormat("HH:mm:ss.SSS").format(java.util.Date())
-        gestureLogs = (gestureLogs + "[$time] $message").takeLast(8)  // 保留最近8条
-    }
+    var currentlyPlaying by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         context.soundDataStore.data
@@ -159,10 +167,6 @@ fun SoundScreen(
             .collect { newList ->
                 descriptions = newList
             }
-    }
-
-    val dirPath = remember {
-        context.getExternalFilesDir(null)?.resolve("sounds")?.absolutePath ?: "无法获取路径"
     }
 
     Scaffold(
@@ -180,86 +184,77 @@ fun SoundScreen(
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("摇一摇播放声音", style = MaterialTheme.typography.headlineMedium)
-            Spacer(Modifier.height(16.dp))
-
             Text(
-                "把音频文件放到：\n$dirPath\n文件名必须完全等于描述（包括后缀）",
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.Gray,
-                textAlign = TextAlign.Center
+                "摇一摇播放声音",
+                style = MaterialTheme.typography.headlineMedium
             )
             Spacer(Modifier.height(24.dp))
 
-            // 日志显示区域
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(140.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5))
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(12.dp)
-                ) {
-                    Text("手势调试日志（短按/长按）", style = MaterialTheme.typography.titleSmall)
-                    Spacer(Modifier.height(4.dp))
-                    LazyColumn {
-                        items(gestureLogs) { log ->
-                            Text(log, style = MaterialTheme.typography.bodySmall, color = Color.DarkGray)
-                        }
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(16.dp))
-
             if (descriptions.isEmpty()) {
-                Text("还没有声音描述\n点击右下角 + 添加", color = Color.Gray)
+                Text(
+                    "还没有声音描述\n点击右下角 + 添加",
+                    color = Color.Gray,
+                    textAlign = TextAlign.Center
+                )
             } else {
                 LazyColumn(modifier = Modifier.weight(1f)) {
                     items(descriptions) { desc ->
                         val isSelected = desc == selected
+                        val isPlaying = desc == currentlyPlaying
 
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            border = BorderStroke(
-                                width = 2.dp,
-                                color = if (isSelected) Color.Blue else Color.LightGray
-                            ),
-                            color = if (isSelected) Color.Blue.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface,
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 4.dp)
-                                .pointerInput(desc) {  // key = desc 避免重组问题
-                                    detectTapGestures(
-                                        onPress = { offset ->
-                                            logGesture("按下 → $desc")
-                                            tryAwaitRelease()
-                                            logGesture("抬起 → $desc （如果没有长按则视为短按）")
-                                        },
-                                        onTap = {
-                                            logGesture("短按触发 → 选中 $desc")
-                                            onSelect(desc)
-                                        },
-                                        onLongPress = { offset ->
-                                            logGesture("长按触发！ → 编辑/删除 $desc")
-                                            editingDesc = desc
-                                        }
-                                    )
-                                }
+                                .padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Box(
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(
+                                    width = 2.dp,
+                                    color = if (isSelected) Color.Blue else Color.LightGray
+                                ),
+                                color = if (isSelected) Color.Blue.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface,
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                                contentAlignment = Alignment.Center
+                                    .weight(1f)
+                                    .pointerInput(desc) {
+                                        detectTapGestures(
+                                            onTap = { onSelect(desc) },
+                                            onLongPress = { editingDesc = desc }
+                                        )
+                                    }
                             ) {
-                                Text(
-                                    text = desc,
-                                    color = if (isSelected) Color.Blue else MaterialTheme.colorScheme.onSurface
-                                )
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = desc,
+                                        color = if (isSelected) Color.Blue else MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.weight(1f)
+                                    )
+
+                                    IconButton(
+                                        onClick = {
+                                            if (isPlaying) {
+                                                onStop()
+                                                currentlyPlaying = null
+                                            } else {
+                                                onPlay(desc)
+                                                currentlyPlaying = desc
+                                            }
+                                        }
+                                    ) {
+                                        Icon(
+                                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                            contentDescription = if (isPlaying) "暂停" else "播放",
+                                            tint = if (isPlaying) Color.Red else MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -268,7 +263,7 @@ fun SoundScreen(
         }
     }
 
-    // 添加对话框（保持不变，略）
+    // 添加新声音对话框
     if (showAddDialog) {
         AlertDialog(
             onDismissRequest = { showAddDialog = false },
@@ -302,7 +297,7 @@ fun SoundScreen(
         )
     }
 
-    // 编辑/删除对话框（略微优化结构）
+    // 编辑/删除对话框
     editingDesc?.let { current ->
         var editInput by remember { mutableStateOf(current) }
 
@@ -346,6 +341,10 @@ fun SoundScreen(
                             }
                         }
                         if (selected == toDelete) onSelect("")
+                        if (currentlyPlaying == toDelete) {
+                            onStop()
+                            currentlyPlaying = null
+                        }
                         editingDesc = null
                     }) {
                         Text("删除", color = MaterialTheme.colorScheme.error)
