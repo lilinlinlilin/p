@@ -7,9 +7,9 @@ import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.media.MediaPlayer
 import android.os.Bundle
-import android.view.View
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.BorderStroke
@@ -27,7 +27,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.core.view.WindowCompat
+import androidx.compose.ui.window.WindowInsets
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
@@ -45,7 +45,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private var accelerometer: Sensor? = null
     private var currentPlayer: MediaPlayer? = null
     private var selectedDesc by mutableStateOf<String?>(null)
-    private var currentlyPlayingDesc by mutableStateOf<String?>(null)  // 新增：记录当前播放的描述
+    private var currentlyPlayingDesc by mutableStateOf<String?>(null)
 
     private val shakeThreshold = 15f
     private var lastShake = 0L
@@ -53,17 +53,16 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        enableEdgeToEdge()
-
-        // 隐藏状态栏和导航栏（真正全屏）
-        WindowCompat.setDecorFitsSystemWindows(window, false)
-        window.decorView.systemUiVisibility = (
-            View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
-            View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
-            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
-            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
-            View.SYSTEM_UI_FLAG_FULLSCREEN or
-            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+        // 啟用 edge-to-edge，讓系統欄透明（狀態欄 + 導航欄）
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.auto(
+                lightScrim = android.graphics.Color.TRANSPARENT,
+                darkScrim = android.graphics.Color.TRANSPARENT
+            ),
+            navigationBarStyle = SystemBarStyle.auto(
+                lightScrim = android.graphics.Color.TRANSPARENT,
+                darkScrim = android.graphics.Color.TRANSPARENT
+            )
         )
 
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
@@ -117,7 +116,6 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val speed = sqrt(x * x + y * y + z * z) - SensorManager.GRAVITY_EARTH
 
         if (abs(speed) > shakeThreshold && selectedDesc != null) {
-            // 播放同一首时不重新播放
             if (currentPlayer?.isPlaying != true || currentlyPlayingDesc != selectedDesc) {
                 playAudio(selectedDesc!!)
             }
@@ -144,7 +142,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 }
                 currentlyPlayingDesc = desc
             } catch (e: Exception) {
-                Toast.makeText(this@MainActivity, "播放失败：${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(this@MainActivity, "播放失敗：${e.message}", Toast.LENGTH_LONG).show()
                 currentlyPlayingDesc = null
             }
         } else {
@@ -194,6 +192,8 @@ fun SoundScreen(
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
+        // 關鍵：阻止 Scaffold 自動加入超大系統欄 padding（解決「留很大距離」）
+        contentWindowInsets = WindowInsets(0.dp),
         floatingActionButton = {
             FloatingActionButton(onClick = { showAddDialog = true }) {
                 Text("+")
@@ -203,7 +203,7 @@ fun SoundScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .padding(innerPadding)  // 現在 innerPadding 很小，不會留大空白
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -221,7 +221,7 @@ fun SoundScreen(
                                 .padding(vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // 主区域：统一手势处理
+                            // 主區域：統一手勢處理
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
                                 border = BorderStroke(
@@ -253,7 +253,7 @@ fun SoundScreen(
 
                             Spacer(Modifier.width(8.dp))
 
-                            // 小播放按钮：36dp 圆形、无任何内容
+                            // 小播放按钮
                             Button(
                                 onClick = {
                                     onPlayToggle(desc)
@@ -274,7 +274,7 @@ fun SoundScreen(
         }
     }
 
-    // 添加对话框（极简）
+    // 添加對話框
     if (showAddDialog) {
         AlertDialog(
             onDismissRequest = { showAddDialog = false },
@@ -302,13 +302,13 @@ fun SoundScreen(
                         inputDesc = ""
                     }
                     showAddDialog = false
-                }) { Text("确定") }
+                }) { Text("確定") }
             },
             dismissButton = { TextButton(onClick = { showAddDialog = false }) { } }
         )
     }
 
-    // 编辑/删除对话框（极简）
+    // 編輯/刪除對話框
     editingDesc?.let { current ->
         var editInput by remember { mutableStateOf(current) }
 
@@ -351,14 +351,14 @@ fun SoundScreen(
                                 }
                             }
                         }
-                        if (selected == toDelete) onSelect("")
+                        if (selected == toDelete) onSelect(null)
                         if (currentlyPlaying == toDelete) {
                             onPlayToggle(toDelete)
                             currentlyPlaying = null
                         }
                         editingDesc = null
                     }) {
-                        Text("删除", color = MaterialTheme.colorScheme.error)
+                        Text("刪除", color = MaterialTheme.colorScheme.error)
                     }
                     TextButton(onClick = { editingDesc = null }) { }
                 }
