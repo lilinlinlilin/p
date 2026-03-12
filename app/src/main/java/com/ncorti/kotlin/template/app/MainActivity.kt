@@ -12,6 +12,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.core.view.WindowCompat  // 重要 import
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
@@ -36,8 +37,6 @@ import java.io.File
 import kotlin.math.abs
 import kotlin.math.sqrt
 
-import androidx.compose.foundation.layout.WindowInsets
-
 val Context.soundDataStore: DataStore<Preferences> by preferencesDataStore(name = "sounds")
 
 class MainActivity : ComponentActivity(), SensorEventListener {
@@ -54,6 +53,10 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // 關鍵：強制視窗占滿螢幕（DecorView 拉滿），解決「不是軟件區域」
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+
+        // 啟用 edge-to-edge + 透明系統欄
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.auto(
                 lightScrim = android.graphics.Color.TRANSPARENT,
@@ -84,7 +87,6 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
     }
 
-    // onResume, onPause, onDestroy, onSensorChanged, playAudio, togglePlay 保持原樣
     override fun onResume() {
         super.onResume()
         sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_GAME)
@@ -191,39 +193,24 @@ fun SoundScreen(
             }
     }
 
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        contentWindowInsets = WindowInsets(0.dp),
-        floatingActionButton = {
-            FloatingActionButton(onClick = { showAddDialog = true }) {
-                Text("+")
-            }
-        }
-    ) { _ ->  // 忽略 innerPadding，不用它來 padding
-
-        // 用 Column 撐滿高度，從頂開始排列
+    // 用 Box 確保內容填滿視窗（現在視窗已滿，內容會跟著滿）
+    Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
-                .fillMaxSize()  // 確保撐滿整個螢幕
-                .safeDrawingPadding()  // 避開被蓋，但不加過多（如果空白太大可註解測試）
-                .padding(horizontal = 16.dp),
+                .fillMaxSize()
+                .padding(horizontal = 16.dp)
+                .safeContentPadding(),  // 避開系統欄蓋住內容，但不壓縮高度
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Top  // 從頂開始，不居中或往下沉
+            verticalArrangement = Arrangement.Top
         ) {
             if (descriptions.isEmpty()) {
                 Spacer(Modifier.weight(1f))
-                Text("尚未添加描述，點擊 + 添加", style = MaterialTheme.typography.bodyLarge)
+                Text("尚未添加描述，點擊 + 添加")
                 Spacer(Modifier.weight(1f))
             } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()  // LazyColumn 也撐滿，避免只佔部分高度
-                        .weight(1f)     // 讓它擴張
-                ) {
+                LazyColumn(modifier = Modifier.weight(1f)) {
                     items(descriptions) { desc ->
-                        val isSelected = desc == selected
-                        val isPlaying = desc == currentlyPlaying
-
+                        // Row 內容保持原樣
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -234,9 +221,9 @@ fun SoundScreen(
                                 shape = RoundedCornerShape(12.dp),
                                 border = BorderStroke(
                                     width = 2.dp,
-                                    color = if (isSelected) Color.Blue else Color.LightGray
+                                    color = if (desc == selected) Color.Blue else Color.LightGray
                                 ),
-                                color = if (isSelected) Color.Blue.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface,
+                                color = if (desc == selected) Color.Blue.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface,
                                 modifier = Modifier
                                     .weight(1f)
                                     .pointerInput(desc) {
@@ -254,7 +241,7 @@ fun SoundScreen(
                                 ) {
                                     Text(
                                         text = desc,
-                                        color = if (isSelected) Color.Blue else MaterialTheme.colorScheme.onSurface
+                                        color = if (desc == selected) Color.Blue else MaterialTheme.colorScheme.onSurface
                                     )
                                 }
                             }
@@ -264,29 +251,33 @@ fun SoundScreen(
                             Button(
                                 onClick = {
                                     onPlayToggle(desc)
-                                    currentlyPlaying = if (isPlaying) null else desc
+                                    currentlyPlaying = if (desc == currentlyPlaying) null else desc
                                 },
                                 modifier = Modifier.size(36.dp),
                                 shape = CircleShape,
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = if (isPlaying) Color.Red.copy(alpha = 0.8f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                                    containerColor = if (desc == currentlyPlaying) Color.Red.copy(alpha = 0.8f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
                                 ),
                                 contentPadding = PaddingValues(0.dp),
                                 elevation = ButtonDefaults.buttonElevation(0.dp)
                             ) {}
                         }
                     }
-
-                    // 底部加額外空間，避免最後項目太貼底（根據導航欄調）
-                    item {
-                        Spacer(Modifier.height(96.dp))
-                    }
                 }
             }
         }
+
+        FloatingActionButton(
+            onClick = { showAddDialog = true },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp)
+        ) {
+            Text("+")
+        }
     }
 
-    // 添加對話框和編輯對話框保持原樣
+    // 添加對話框
     if (showAddDialog) {
         AlertDialog(
             onDismissRequest = { showAddDialog = false },
@@ -320,6 +311,7 @@ fun SoundScreen(
         )
     }
 
+    // 編輯/刪除對話框
     editingDesc?.let { current ->
         var editInput by remember { mutableStateOf(current) }
 
