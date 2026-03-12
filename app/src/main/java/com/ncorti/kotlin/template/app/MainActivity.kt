@@ -64,7 +64,16 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     SoundScreen(
                         selected = selectedDesc,
                         onSelect = { selectedDesc = it },
-                        onPlayToggle = { desc -> togglePlay(desc) }
+                        onPlayToggle = { desc ->
+                            if (currentPlayer?.isPlaying == true && selectedDesc == desc) {
+                                currentPlayer?.stop()
+                                currentPlayer?.release()
+                                currentPlayer = null
+                            } else {
+                                playAudio(desc)
+                                selectedDesc = desc
+                            }
+                        }
                     )
                 }
             }
@@ -130,17 +139,6 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             Toast.makeText(this@MainActivity, "未找到音频文件：$desc", Toast.LENGTH_SHORT).show()
         }
     }
-
-    fun togglePlay(desc: String) {
-        if (currentPlayer?.isPlaying == true && selectedDesc == desc) {
-            currentPlayer?.stop()
-            currentPlayer?.release()
-            currentPlayer = null
-        } else {
-            playAudio(desc)
-            selectedDesc = desc
-        }
-    }
 }
 
 @Composable
@@ -150,7 +148,6 @@ fun SoundScreen(
     onPlayToggle: (String) -> Unit
 ) {
     val context = LocalContext.current
-    val activity = context as? MainActivity  // 获取 Activity 实例
     val scope = rememberCoroutineScope()
 
     var descriptions by remember { mutableStateOf(listOf<String>()) }
@@ -214,50 +211,56 @@ fun SoundScreen(
                                 .padding(vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            OutlinedButton(
-                                onClick = { onSelect(desc) },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .pointerInput(desc) {
-                                        detectTapGestures(
-                                            onLongPress = { editingDesc = desc }
-                                        )
-                                    },
+                            // 主区域：统一用 pointerInput 处理所有手势（参考脚本风格）
+                            Surface(
                                 shape = RoundedCornerShape(12.dp),
                                 border = BorderStroke(
                                     width = 2.dp,
                                     color = if (isSelected) Color.Blue else Color.LightGray
                                 ),
-                                colors = ButtonDefaults.outlinedButtonColors(
-                                    containerColor = if (isSelected) Color.Blue.copy(alpha = 0.08f) else Color.Transparent,
-                                    contentColor = if (isSelected) Color.Blue else MaterialTheme.colorScheme.onSurface
-                                )
+                                color = if (isSelected) Color.Blue.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .pointerInput(desc) {
+                                        detectTapGestures(
+                                            onTap = {
+                                                onSelect(desc)
+                                            },
+                                            onLongPress = {
+                                                editingDesc = desc
+                                            }
+                                        )
+                                    }
                             ) {
-                                Text(
-                                    text = desc,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    textAlign = TextAlign.Start
-                                )
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                                    contentAlignment = Alignment.CenterStart
+                                ) {
+                                    Text(
+                                        text = desc,
+                                        color = if (isSelected) Color.Blue else MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
                             }
 
                             Spacer(Modifier.width(8.dp))
 
-                            // 小播放按钮：36dp 圆形、无文字无图标
+                            // 小播放按钮：36dp 圆形、无内容
                             Button(
                                 onClick = {
-                                    activity?.togglePlay(desc)
+                                    onPlayToggle(desc)
                                     currentlyPlaying = if (isPlaying) null else desc
                                 },
                                 modifier = Modifier.size(36.dp),
                                 shape = CircleShape,
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = if (isPlaying) Color(0xFFF44336) else MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+                                    containerColor = if (isPlaying) Color.Red.copy(alpha = 0.8f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
                                 ),
                                 contentPadding = PaddingValues(0.dp),
-                                elevation = ButtonDefaults.buttonElevation(2.dp)
-                            ) {
-                                // 留空：纯颜色按钮
-                            }
+                                elevation = ButtonDefaults.buttonElevation(0.dp)
+                            ) {}
                         }
                     }
                 }
@@ -265,7 +268,7 @@ fun SoundScreen(
         }
     }
 
-    // 添加对话框（略）
+    // 添加对话框
     if (showAddDialog) {
         AlertDialog(
             onDismissRequest = { showAddDialog = false },
@@ -300,7 +303,7 @@ fun SoundScreen(
         )
     }
 
-    // 编辑/删除对话框（略）
+    // 编辑/删除对话框
     editingDesc?.let { current ->
         var editInput by remember { mutableStateOf(current) }
 
@@ -345,7 +348,7 @@ fun SoundScreen(
                         }
                         if (selected == toDelete) onSelect("")
                         if (currentlyPlaying == toDelete) {
-                            activity?.togglePlay(toDelete)  // 停止播放
+                            onPlayToggle(toDelete)  // 停止播放
                             currentlyPlaying = null
                         }
                         editingDesc = null
