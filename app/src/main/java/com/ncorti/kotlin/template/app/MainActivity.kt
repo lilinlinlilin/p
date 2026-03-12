@@ -17,9 +17,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -207,8 +204,10 @@ fun SoundScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
+                            // 主內容區域（可點選 + 長按）
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
                                 border = BorderStroke(
@@ -238,7 +237,8 @@ fun SoundScreen(
                                         modifier = Modifier.weight(1f)
                                     )
 
-                                    IconButton(
+                                    // 純文字播放按鈕
+                                    TextButton(
                                         onClick = {
                                             if (isPlaying) {
                                                 onStop()
@@ -247,12 +247,14 @@ fun SoundScreen(
                                                 onPlay(desc)
                                                 currentlyPlaying = desc
                                             }
-                                        }
+                                        },
+                                        colors = ButtonDefaults.textButtonColors(
+                                            contentColor = if (isPlaying) Color.Red else MaterialTheme.colorScheme.primary
+                                        )
                                     ) {
-                                        Icon(
-                                            imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                                            contentDescription = if (isPlaying) "暫停" else "播放",
-                                            tint = if (isPlaying) Color.Red else MaterialTheme.colorScheme.primary
+                                        Text(
+                                            text = if (isPlaying) "暫停" else "播放",
+                                            style = MaterialTheme.typography.labelLarge
                                         )
                                     }
                                 }
