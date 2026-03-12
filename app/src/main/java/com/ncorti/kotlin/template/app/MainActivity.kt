@@ -16,6 +16,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -63,8 +64,14 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     SoundScreen(
                         selected = selectedDesc,
                         onSelect = { selectedDesc = it },
-                        onPlay = { desc -> playAudio(desc) },
-                        onStop = { stopAudio() }
+                        onPlayToggle = { desc ->
+                            if (currentPlayer?.isPlaying == true && selectedDesc == desc) {
+                                stopAudio()
+                            } else {
+                                playAudio(desc)
+                                selectedDesc = desc
+                            }
+                        }
                     )
                 }
             }
@@ -100,7 +107,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val z = event.values[2].toDouble()
         val speed = sqrt(x * x + y * y + z * z) - SensorManager.GRAVITY_EARTH
 
-        if (abs(speed) > shakeThreshold && !selectedDesc.isNullOrBlank()) {
+        if (abs(speed) > shakeThreshold && selectedDesc != null) {
             playAudio(selectedDesc!!)
         }
     }
@@ -115,21 +122,19 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         if (!soundsDir.exists()) soundsDir.mkdirs()
 
         val audioFile = File(soundsDir, desc)
-        if (!audioFile.exists()) {
-            Toast.makeText(this, "未找到音檔：$desc", Toast.LENGTH_SHORT).show()
-            return
-        }
 
-        try {
-            currentPlayer = MediaPlayer().apply {
-                setDataSource(audioFile.absolutePath)
-                prepare()
-                start()
+        if (audioFile.exists()) {
+            try {
+                currentPlayer = MediaPlayer().apply {
+                    setDataSource(audioFile.absolutePath)
+                    prepare()
+                    start()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(this@MainActivity, "播放失败：${e.message}", Toast.LENGTH_LONG).show()
             }
-        } catch (e: Exception) {
-            Toast.makeText(this, "播放失敗：${e.message}", Toast.LENGTH_LONG).show()
-            currentPlayer?.release()
-            currentPlayer = null
+        } else {
+            Toast.makeText(this@MainActivity, "未找到音频文件：$desc", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -144,8 +149,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 fun SoundScreen(
     selected: String?,
     onSelect: (String) -> Unit,
-    onPlay: (String) -> Unit,
-    onStop: () -> Unit
+    onPlayToggle: (String) -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -154,7 +158,9 @@ fun SoundScreen(
     var showAddDialog by remember { mutableStateOf(false) }
     var inputDesc by remember { mutableStateOf("") }
     var editingDesc by remember { mutableStateOf<String?>(null) }
-    var currentlyPlaying by remember { mutableStateOf<String?>(null) }
+
+    // 当前是否正在播放（用于视觉反馈）
+    var isPlaying by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         context.soundDataStore.data
@@ -183,81 +189,70 @@ fun SoundScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                "搖一搖播放聲音",
+                "摇一摇播放声音",
                 style = MaterialTheme.typography.headlineMedium
             )
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(16.dp))
 
             if (descriptions.isEmpty()) {
-                Text(
-                    "還沒有聲音描述\n點擊右下角 + 新增",
-                    color = Color.Gray,
-                    textAlign = TextAlign.Center
-                )
+                Text("还没有声音描述\n点击右下角 + 添加", color = Color.Gray)
             } else {
-                LazyColumn(modifier = Modifier.weight(1f)) {
+                LazyColumn {
                     items(descriptions) { desc ->
                         val isSelected = desc == selected
-                        val isPlaying = desc == currentlyPlaying
+                        val playingThis = isPlaying && isSelected
 
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 6.dp),
+                                .padding(vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            // 主內容區域（可點選 + 長按）
-                            Surface(
+                            // 主按钮（样式与原脚本一致）
+                            OutlinedButton(
+                                onClick = { onSelect(desc) },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .pointerInput(Unit) {
+                                        detectTapGestures(
+                                            onLongPress = { editingDesc = desc }
+                                        )
+                                    },
                                 shape = RoundedCornerShape(12.dp),
                                 border = BorderStroke(
                                     width = 2.dp,
                                     color = if (isSelected) Color.Blue else Color.LightGray
                                 ),
-                                color = if (isSelected) Color.Blue.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .pointerInput(desc) {
-                                        detectTapGestures(
-                                            onTap = { onSelect(desc) },
-                                            onLongPress = { editingDesc = desc }
-                                        )
-                                    }
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = if (isSelected) Color.Blue.copy(alpha = 0.08f) else Color.Transparent,
+                                    contentColor = if (isSelected) Color.Blue else MaterialTheme.colorScheme.onSurface
+                                )
                             ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp, vertical = 14.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text(
-                                        text = desc,
-                                        color = if (isSelected) Color.Blue else MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.weight(1f)
-                                    )
+                                Text(
+                                    text = desc,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    textAlign = TextAlign.Start
+                                )
+                            }
 
-                                    // 純文字播放按鈕
-                                    TextButton(
-                                        onClick = {
-                                            if (isPlaying) {
-                                                onStop()
-                                                currentlyPlaying = null
-                                            } else {
-                                                onPlay(desc)
-                                                currentlyPlaying = desc
-                                            }
-                                        },
-                                        colors = ButtonDefaults.textButtonColors(
-                                            contentColor = if (isPlaying) Color.Red else MaterialTheme.colorScheme.primary
-                                        )
-                                    ) {
-                                        Text(
-                                            text = if (isPlaying) "暫停" else "播放",
-                                            style = MaterialTheme.typography.labelLarge
-                                        )
-                                    }
-                                }
+                            Spacer(Modifier.width(8.dp))
+
+                            // 小播放按钮（无文字、无图标、圆形、极简）
+                            Button(
+                                onClick = {
+                                    onPlayToggle(desc)
+                                    isPlaying = !isPlaying || !playingThis
+                                },
+                                modifier = Modifier.size(40.dp),
+                                shape = CircleShape,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (playingThis) Color.Red.copy(alpha = 0.7f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+                                    contentColor = Color.White
+                                ),
+                                contentPadding = PaddingValues(0.dp)
+                            ) {
+                                // 留空：无文字、无图标，只用颜色表示状态
                             }
                         }
                     }
@@ -266,18 +261,17 @@ fun SoundScreen(
         }
     }
 
-    // 新增聲音對話框
+    // 添加对话框（保持原样）
     if (showAddDialog) {
         AlertDialog(
             onDismissRequest = { showAddDialog = false },
-            title = { Text("新增聲音") },
+            title = { Text("添加新声音") },
             text = {
                 OutlinedTextField(
                     value = inputDesc,
                     onValueChange = { inputDesc = it.trim() },
-                    label = { Text("描述（必須包含副檔名，例如 '開心.ogg'）") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    label = { Text("描述（必须包含后缀，如 '开心.ogg'）") },
+                    singleLine = true
                 )
             },
             confirmButton = {
@@ -286,71 +280,75 @@ fun SoundScreen(
                         val newList = (descriptions + inputDesc).distinct()
                         scope.launch {
                             context.soundDataStore.updateData { prefs ->
+                                val updated = newList.joinToString(",")
                                 prefs.toMutablePreferences().apply {
-                                    set(stringPreferencesKey("descriptions"), newList.joinToString(","))
+                                    set(stringPreferencesKey("descriptions"), updated)
                                 }
                             }
                         }
                         inputDesc = ""
                     }
                     showAddDialog = false
-                }) { Text("新增") }
+                }) {
+                    Text("添加")
+                }
             },
-            dismissButton = { TextButton(onClick = { showAddDialog = false }) { Text("取消") } }
+            dismissButton = {
+                TextButton(onClick = { showAddDialog = false }) { Text("取消") }
+            }
         )
     }
 
-    // 編輯/刪除對話框
-    editingDesc?.let { current ->
-        var editInput by remember { mutableStateOf(current) }
-
+    // 编辑/删除对话框（保持原样）
+    if (editingDesc != null) {
+        var editInput by remember { mutableStateOf(editingDesc ?: "") }
         AlertDialog(
             onDismissRequest = { editingDesc = null },
-            title = { Text("編輯或刪除：$current") },
+            title = { Text("编辑或删除：$editingDesc") },
             text = {
                 OutlinedTextField(
                     value = editInput,
                     onValueChange = { editInput = it.trim() },
-                    label = { Text("修改描述（保留副檔名）") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    label = { Text("修改描述（保持后缀）") },
+                    singleLine = true
                 )
             },
             confirmButton = {
                 TextButton(onClick = {
-                    if (editInput.isNotBlank() && editInput != current) {
-                        val newList = descriptions.map { if (it == current) editInput else it }
+                    if (editInput.isNotBlank() && editInput != editingDesc) {
+                        val old = editingDesc!!
+                        val newList = descriptions.map { if (it == old) editInput else it }
                         scope.launch {
                             context.soundDataStore.updateData { prefs ->
+                                val updated = newList.joinToString(",")
                                 prefs.toMutablePreferences().apply {
-                                    set(stringPreferencesKey("descriptions"), newList.joinToString(","))
+                                    set(stringPreferencesKey("descriptions"), updated)
                                 }
                             }
                         }
                     }
                     editingDesc = null
-                }) { Text("儲存修改") }
+                }) {
+                    Text("保存修改")
+                }
             },
             dismissButton = {
                 Row {
                     TextButton(onClick = {
-                        val toDelete = current
+                        val toDelete = editingDesc!!
                         val newList = descriptions.filter { it != toDelete }
                         scope.launch {
                             context.soundDataStore.updateData { prefs ->
+                                val updated = newList.joinToString(",")
                                 prefs.toMutablePreferences().apply {
-                                    set(stringPreferencesKey("descriptions"), newList.joinToString(","))
+                                    set(stringPreferencesKey("descriptions"), updated)
                                 }
                             }
                         }
                         if (selected == toDelete) onSelect("")
-                        if (currentlyPlaying == toDelete) {
-                            onStop()
-                            currentlyPlaying = null
-                        }
                         editingDesc = null
                     }) {
-                        Text("刪除", color = MaterialTheme.colorScheme.error)
+                        Text("删除", color = MaterialTheme.colorScheme.error)
                     }
                     TextButton(onClick = { editingDesc = null }) { Text("取消") }
                 }
