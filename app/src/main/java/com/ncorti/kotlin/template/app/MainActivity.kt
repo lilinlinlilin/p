@@ -43,6 +43,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private var accelerometer: Sensor? = null
     private var currentPlayer: MediaPlayer? = null
     private var selectedDesc by mutableStateOf<String?>(null)
+    private var currentlyPlayingDesc by mutableStateOf<String?>(null)  // 新增：记录当前播放的描述
 
     private val shakeThreshold = 15f
     private var lastShake = 0L
@@ -63,16 +64,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     SoundScreen(
                         selected = selectedDesc,
                         onSelect = { selectedDesc = it },
-                        onPlayToggle = { desc ->
-                            if (currentPlayer?.isPlaying == true && selectedDesc == desc) {
-                                currentPlayer?.stop()
-                                currentPlayer?.release()
-                                currentPlayer = null
-                            } else {
-                                playAudio(desc)
-                                selectedDesc = desc
-                            }
-                        }
+                        onPlayToggle = { desc -> togglePlay(desc) }
                     )
                 }
             }
@@ -88,11 +80,13 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         super.onPause()
         sensorManager.unregisterListener(this)
         currentPlayer?.pause()
+        currentlyPlayingDesc = null
     }
 
     override fun onDestroy() {
         currentPlayer?.release()
         currentPlayer = null
+        currentlyPlayingDesc = null
         super.onDestroy()
     }
 
@@ -109,7 +103,10 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val speed = sqrt(x * x + y * y + z * z) - SensorManager.GRAVITY_EARTH
 
         if (abs(speed) > shakeThreshold && selectedDesc != null) {
-            playAudio(selectedDesc!!)
+            // 播放同一首时不重新播放
+            if (currentPlayer?.isPlaying != true || currentlyPlayingDesc != selectedDesc) {
+                playAudio(selectedDesc!!)
+            }
         }
     }
 
@@ -131,11 +128,26 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     prepare()
                     start()
                 }
+                currentlyPlayingDesc = desc
             } catch (e: Exception) {
                 Toast.makeText(this@MainActivity, "播放失败：${e.message}", Toast.LENGTH_LONG).show()
+                currentlyPlayingDesc = null
             }
         } else {
             Toast.makeText(this@MainActivity, "未找到音频文件：$desc", Toast.LENGTH_SHORT).show()
+            currentlyPlayingDesc = null
+        }
+    }
+
+    fun togglePlay(desc: String) {
+        if (currentPlayer?.isPlaying == true && currentlyPlayingDesc == desc) {
+            currentPlayer?.stop()
+            currentPlayer?.release()
+            currentPlayer = null
+            currentlyPlayingDesc = null
+        } else {
+            playAudio(desc)
+            selectedDesc = desc
         }
     }
 }
@@ -181,8 +193,6 @@ fun SoundScreen(
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(Modifier.height(24.dp))
-
             if (descriptions.isEmpty()) {
                 Spacer(Modifier.weight(1f))
             } else {
@@ -229,7 +239,7 @@ fun SoundScreen(
 
                             Spacer(Modifier.width(8.dp))
 
-                            // 小播放按钮：36dp 圆形、无文字无图标
+                            // 小播放按钮：36dp 圆形、无任何内容
                             Button(
                                 onClick = {
                                     onPlayToggle(desc)
@@ -250,16 +260,16 @@ fun SoundScreen(
         }
     }
 
-    // 添加对话框（无额外文字提示）
+    // 添加对话框（极简）
     if (showAddDialog) {
         AlertDialog(
             onDismissRequest = { showAddDialog = false },
-            title = { Text("新增") },
+            title = { },
             text = {
                 OutlinedTextField(
                     value = inputDesc,
                     onValueChange = { inputDesc = it.trim() },
-                    label = { Text("描述（含后缀）") },
+                    label = { Text("描述") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -280,22 +290,22 @@ fun SoundScreen(
                     showAddDialog = false
                 }) { Text("确定") }
             },
-            dismissButton = { TextButton(onClick = { showAddDialog = false }) { Text("取消") } }
+            dismissButton = { TextButton(onClick = { showAddDialog = false }) { } }
         )
     }
 
-    // 编辑/删除对话框
+    // 编辑/删除对话框（极简）
     editingDesc?.let { current ->
         var editInput by remember { mutableStateOf(current) }
 
         AlertDialog(
             onDismissRequest = { editingDesc = null },
-            title = { Text("操作") },
+            title = { },
             text = {
                 OutlinedTextField(
                     value = editInput,
                     onValueChange = { editInput = it.trim() },
-                    label = { Text("修改描述") },
+                    label = { Text("修改") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -336,7 +346,7 @@ fun SoundScreen(
                     }) {
                         Text("删除", color = MaterialTheme.colorScheme.error)
                     }
-                    TextButton(onClick = { editingDesc = null }) { Text("取消") }
+                    TextButton(onClick = { editingDesc = null }) { }
                 }
             }
         )
