@@ -1,7 +1,6 @@
 package com.ncorti.kotlin.template.app
 
 import android.content.Context
-import android.graphics.Color
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -10,7 +9,6 @@ import android.media.MediaPlayer
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.BorderStroke
@@ -25,7 +23,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color as ComposeColor
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -53,16 +51,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // 強化 edge-to-edge：明確透明 + light 圖示（解決黑邊/不透明問題）
-        enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.light(
-                Color.TRANSPARENT, Color.TRANSPARENT
-            ),
-            navigationBarStyle = SystemBarStyle.light(
-                Color.TRANSPARENT, Color.TRANSPARENT
-            )
-        )
+        enableEdgeToEdge()
 
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
@@ -71,7 +60,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             MaterialTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = ComposeColor.Transparent  // 避免 Surface 蓋住背景
+                    color = Color.Transparent
                 ) {
                     SoundScreen(
                         selected = selectedDesc,
@@ -191,7 +180,7 @@ fun SoundScreen(
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
-        containerColor = ComposeColor.Transparent,
+        containerColor = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onBackground,
         floatingActionButton = {
             FloatingActionButton(onClick = { showAddDialog = true }) {
@@ -200,7 +189,6 @@ fun SoundScreen(
         }
     ) { innerPadding ->
 
-        // 關鍵：Box 填滿背景色，延伸到系統欄下面 → 消除黑邊
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -209,13 +197,13 @@ fun SoundScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(innerPadding)  // 內容避開狀態欄 + 導航欄
+                    .padding(innerPadding)
                     .padding(horizontal = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 if (descriptions.isEmpty()) {
                     Spacer(Modifier.weight(1f))
-                    Text("還沒有聲音描述～", color = ComposeColor.Gray)
+                    Text("還沒有聲音描述～", color = Color.Gray)
                     Spacer(Modifier.weight(1f))
                 } else {
                     LazyColumn(modifier = Modifier.weight(1f)) {
@@ -233,9 +221,9 @@ fun SoundScreen(
                                     shape = RoundedCornerShape(12.dp),
                                     border = BorderStroke(
                                         width = 2.dp,
-                                        color = if (isSelected) ComposeColor.Blue else ComposeColor.LightGray
+                                        color = if (isSelected) Color.Blue else Color.LightGray
                                     ),
-                                    color = if (isSelected) ComposeColor.Blue.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface,
+                                    color = if (isSelected) Color.Blue.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface,
                                     modifier = Modifier
                                         .weight(1f)
                                         .pointerInput(desc) {
@@ -253,14 +241,15 @@ fun SoundScreen(
                                     ) {
                                         Text(
                                             text = desc,
-                                            color = if (isSelected) ComposeColor.Blue else MaterialTheme.colorScheme.onSurface
+                                            color = if (isSelected) Color.Blue else MaterialTheme.colorScheme.onSurface
                                         )
                                     }
                                 }
 
                                 Spacer(Modifier.width(8.dp))
 
-                                Button(
+                                // 改用 ElevatedButton，解決 elevation 未解析問題，並有自然陰影
+                                ElevatedButton(
                                     onClick = {
                                         onPlayToggle(desc)
                                         currentlyPlaying = if (isPlaying) null else desc
@@ -268,10 +257,11 @@ fun SoundScreen(
                                     modifier = Modifier.size(36.dp),
                                     shape = CircleShape,
                                     colors = ButtonDefaults.buttonColors(
-                                        containerColor = if (isPlaying) ComposeColor.Red.copy(alpha = 0.8f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                                        containerColor = if (isPlaying) Color.Red.copy(alpha = 0.8f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
                                     ),
-                                    contentPadding = PaddingValues(0.dp),
-                                    elevation = ButtonDefaults.elevation(0.dp)
+                                    contentPadding = PaddingValues(0.dp)
+                                    // ElevatedButton 預設有 elevation，無需額外指定
+                                    // 如需自訂，可加：elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 2.dp)
                                 ) {}
                             }
                         }
@@ -281,7 +271,6 @@ fun SoundScreen(
         }
     }
 
-    // 添加/編輯對話框（保持原樣）
     if (showAddDialog) {
         AlertDialog(
             onDismissRequest = { showAddDialog = false },
